@@ -94,12 +94,13 @@
 | 층 | 값 | 근거 |
 |---|---|---|
 | PIKI-Server stale 판정 | 60s | `ItemParsingScheduler.STALE_TIMEOUT` (기존 값) |
-| PIKI-Server → Extractor HTTP read | 55s (connect 2s) | stale 미만 — recover 의 유령 중복 발주 방지 |
-| Extractor 내부 합계 | 약 50s | 아래 합 + 여유 |
-| 대상 몰 fetch | connect 5s / read 15s | 현행 유지 |
-| Gemini | read 30s | 현행 유지 |
+| PIKI-Server → Extractor HTTP read | 55s (connect 2s) | stale 미만 — recover 의 유령 중복 발주 방지. link·image 공용 |
+| Extractor 내부 합계 (link) | 약 50s | 아래 합 + 여유 |
+| 대상 몰 fetch (link) | connect 5s / read 15s | 현행 유지 |
+| Gemini | read 30s | 현행 유지 (link LLM fallback·image OCR 동일) |
+| Extractor 내부 합계 (image) | 약 40s | S3 download + Gemini OCR 30s + crop + 결과 upload. S3 는 동일 리전이라 수 초 |
 
-**안쪽 예산은 항상 바깥보다 작아야 한다.** Extractor 내부 값을 늘릴 땐 이 표를 갱신하고 PIKI-Server 쪽 read 타임아웃과 함께 재검증한다.
+**안쪽 예산은 항상 바깥보다 작아야 한다.** link 와 image 가 호출자 read 55s 를 공유하므로, 어느 경로든 Extractor 내부 값을 늘릴 땐 이 표를 갱신하고 PIKI-Server 쪽 read 타임아웃과 함께 재검증한다.
 
 ## 4. 진화 규칙
 
