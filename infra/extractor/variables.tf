@@ -51,10 +51,12 @@ variable "instance_type" {
 variable "ami_id" {
   description = <<-EOT
     고정 AMI ID. null 이면 data.aws_ami 로 최신 arm64 Ubuntu 24.04 를 조회한다.
-    최초 apply 이후에는 조회된 AMI ID 를 여기 고정해, 새 AMI 공개 때 apply 가 인스턴스를 교체(파괴+재생성)하는 걸 막을 것.
+    최초 apply(2026-07-07) 후 조회된 AMI 를 여기 고정했다 — 새 AMI 공개 때 apply 가 인스턴스를
+    교체(파괴+재생성)하는 걸 막는다. AMI ID 는 region 별 public 값이라 커밋해도 안전(tfvars 는 gitignore 라
+    이 default 에 둬야 다른 사람 apply 에서도 교체가 안 난다). 의도적 재프로비저닝 때만 값을 바꾼다.
   EOT
   type        = string
-  default     = null
+  default     = "ami-0cac45084c40c4162"
 }
 
 variable "root_volume_size" {
