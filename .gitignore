@@ -19,3 +19,10 @@ build/
 # Environment — .env* 전부 무시하되 템플릿(.env.example)은 커밋 유지
 .env*
 !.env.example
+
+# Terraform — 로컬 상태/캐시와 계정값 주입 파일은 커밋 금지
+.terraform/
+*.tfstate
+*.tfstate.*
+backend.hcl
+*.tfvars
