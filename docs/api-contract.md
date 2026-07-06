@@ -71,19 +71,22 @@
 요청:
 
 ```json
-{ "s3Key": "items/raw/0f3a....png" }
+{ "bucket": "dev-piki-images-250758375457", "key": "items/raw/0f3a....png" }
 ```
 
-성공 200:
+- **`bucket` 을 요청이 준다** — Extractor 는 dev/staging/prod 세 환경 트래픽을 받고 각 환경의 이미지 버킷이 다르다(dev-piki-images-* · staging-piki-images-* · piki-images-*). 버킷을 고정 config 로 두지 않고 요청별로 받아 버킷 무관하게 동작한다. IAM 은 `*piki-images-250758375457/items/*` 와일드카드로 세 버킷을 덮는다.
+- `key`: raw 원본 object key(등록 시 본 서버가 `items/raw/{uuid}.{ext}` 로 durable 적재한 것).
+
+성공 200 (link 경로와 **동일한 필드 모양**):
 
 ```json
-{ "name": "...", "currentPrice": 12000, "currency": "KRW", "croppedImageKey": "items/0f3a....png" }
+{ "name": "...", "imageUrl": "https://dev-piki-images-250758375457.s3.ap-northeast-2.amazonaws.com/items/0f3a....png", "currentPrice": 12000, "currency": "KRW" }
 ```
 
-- link 경로와 달리 `imageUrl` 이 아니라 `croppedImageKey` — 크롭 결과를 Extractor 가 S3(piki-images)에 직접 업로드한다. 크롭 불가(HEIC/WebP 등)면 `null`.
-- 필드별 non-null 규약은 6단계 착수 때 본 서버 이미지 READY 불변식과 맞춰 확정한다.
+- Extractor 가 `download(bucket,key) → OCR 추출 → bbox 크롭(불가 시 원본) → upload(bucket, items/{uuid}.png)` 를 다 하고, 업로드한 결과 이미지의 public URL 을 `imageUrl` 로 돌려준다. imageUrl 은 항상 non-null(크롭 실패해도 원본을 올린다 — 본 서버 워커의 `bbox?.crop ?: 원본` 동작과 동일).
+- non-null 규약은 link 와 같다: name(non-blank)·imageUrl·currentPrice 를 Extractor 가 보장, 못 채우면 422(`UNTRUSTWORTHY_VALUE`).
 
-422 code 추가분: `IMAGE_UNSUPPORTED`(형식 불가), `NOT_PRODUCT`(이미지에서 상품 식별 실패).
+422 code 추가분: `IMAGE_UNSUPPORTED`(빈 이미지·미지원 MIME). 이미지에서 상품 식별 실패는 link 와 같은 `UNTRUSTWORTHY_VALUE` 를 재사용한다.
 일시 실패 추가분: `STORAGE_ERROR` (S3 read/write 실패).
 
 ## 3. 타임아웃 예산

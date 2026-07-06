@@ -14,4 +14,8 @@ public enum ExtractionErrorCode {
     INVALID_URL,
     UPSTREAM_ERROR,
     LLM_UPSTREAM,
+
+    // 이미지(OCR) 경로 (docs/api-contract.md §2 image code 추가분)
+    IMAGE_UNSUPPORTED, // 확정 실패 — 이미지 형식 불가(빈 이미지·미지원 MIME)
+    STORAGE_ERROR,     // 일시 실패 — S3 read/write 오류
 }
