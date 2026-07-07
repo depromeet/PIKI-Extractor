@@ -85,6 +85,21 @@ class ExtractionLinkIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("headlessFirst 힌트는 headless 스위치가 꺼진 기본 구성에서 무시되고 plain 경로로 정상 추출한다")
+    void headlessFirstHintIgnoredWhenHeadlessDisabled() throws Exception {
+        // additive 필드 headlessFirst 의 wire 바인딩과 "스위치 off 면 힌트 무시" 계약을 함께 고정한다.
+        // (힌트를 안 보내는 구버전 호출자의 하위호환은 이 클래스의 나머지 케이스 전부가 url 만 보내며 상시 검증한다.)
+        stubGeminiClient.reset();
+        stubPageFetcher.build = link -> PageContent.of(link, STRUCTURED_HTML);
+
+        mockMvc().perform(post("/internal/extractions/link")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"url\": \"https://shop.example.com/p/9\", \"headlessFirst\": true}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.name").value("직접파싱 상품"));
+    }
+
+    @Test
     @DisplayName("LLM 이 상품 페이지가 아니라고 판정하면 422 NOT_PRODUCT_PAGE 를 반환한다")
     void notProductPage() throws Exception {
         stubGeminiClient.reset();

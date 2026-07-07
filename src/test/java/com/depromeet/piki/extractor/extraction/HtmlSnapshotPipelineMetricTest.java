@@ -9,18 +9,17 @@ import com.depromeet.piki.extractor.support.StubGeminiClient;
 import io.micrometer.prometheusmetrics.PrometheusConfig;
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 import java.util.List;
-import java.util.function.Function;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.ObjectMapper;
 
-// PIKI-Server: product/service/DefaultProductLinkExtractorMetricTest.kt 포팅.
+// (구 DefaultProductLinkExtractorMetricTest — 카운터 발행 지점이 두 전략 공유 파이프라인으로 이동하며 따라왔다.)
 // product.extract 카운터가 운영 레지스트리(Prometheus)에서 두 경로(via=structured/llm) 모두 scrape 되는지 검증한다.
 // Prometheus(client 1.x)는 같은 메트릭 이름의 태그 키 집합이 다르면 뒤 시계열을 예외 없이 조용히 드롭하므로,
 // structured 와 llm 두 경로의 태그 키가 {via, reason} 으로 일치해야 둘 다 남는다. 일반 통합 테스트는
 // SimpleMeterRegistry(이 제약 미적용)를 주입해 이 회귀를 못 잡으므로, 운영과 같은 PrometheusMeterRegistry 로
-// 추출기를 직접 구성하는 별도 분류로 둔다(외부 경계 PageFetcher·GeminiClient 만 stub).
-class DefaultProductLinkExtractorMetricTest {
+// 파이프라인을 직접 구성하는 별도 분류로 둔다(외부 경계 GeminiClient 만 stub).
+class HtmlSnapshotPipelineMetricTest {
 
     private final ProductLink link = ProductLink.parse("https://shop.example.com/products/42");
 
@@ -29,9 +28,7 @@ class DefaultProductLinkExtractorMetricTest {
     void bothPathsSurviveInPrometheusScrape() {
         PrometheusMeterRegistry registry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
         StubGeminiClient stubGemini = new StubGeminiClient();
-        StubFetcher pageFetcher = new StubFetcher();
-        DefaultProductLinkExtractor extractor = new DefaultProductLinkExtractor(
-            pageFetcher,
+        HtmlSnapshotPipeline pipeline = new HtmlSnapshotPipeline(
             new StructuredDataExtractor(new ObjectMapper()),
             new GeminiHtmlExtractor(stubGemini),
             registry
@@ -39,15 +36,14 @@ class DefaultProductLinkExtractorMetricTest {
 
         // 1) 구조화 데이터로 직접 파싱 성공 → via=structured
         // (구조화 Extracted 는 name·price 만 요구 — imageUrl·currency 는 없어도 Extracted 다.)
-        pageFetcher.html = "<html><head><script type=\"application/ld+json\">"
+        String structuredHtml = "<html><head><script type=\"application/ld+json\">"
             + "{\"@type\":\"Product\",\"name\":\"직접파싱\",\"offers\":{\"price\":\"1000\"}}"
             + "</script></head><body></body></html>";
-        extractor.extract(link);
+        pipeline.extract(PageContent.of(link, structuredHtml), "fetch=0ms");
 
         // 2) 구조화 데이터 없음 → LLM fallback → via=llm,reason=no_data
         stubGemini.build = request -> new GeminiExtractionResult(true, "엘엘엠", 2_000, null, null);
-        pageFetcher.html = "<html><body>구조화 없음</body></html>";
-        extractor.extract(link);
+        pipeline.extract(PageContent.of(link, "<html><body>구조화 없음</body></html>"), "fetch=0ms");
 
         String scrape = registry.scrape();
         List<String> lines = scrape.lines().filter(l -> l.startsWith("product_extract_total{")).toList();
@@ -60,16 +56,5 @@ class DefaultProductLinkExtractorMetricTest {
             lines.stream().anyMatch(l -> l.contains("via=\"llm\"")),
             "llm 시계열이 scrape 에 있어야 한다 — 태그 키 불일치로 드롭되면 안 된다:\n" + scrape
         );
-    }
-
-    private static class StubFetcher implements PageFetcher {
-        String html = "";
-
-        private final Function<ProductLink, PageContent> fetch = l -> PageContent.of(l, html);
-
-        @Override
-        public PageContent fetch(ProductLink link) {
-            return fetch.apply(link);
-        }
     }
 }

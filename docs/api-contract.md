@@ -8,7 +8,7 @@
 
 - Extractor 는 **무상태**다. DB 없음, 호출 간 상태 없음. 같은 요청이 중복 도착해도 상태 오염이 없다(중복의 대가는 LLM 비용 한 번뿐). Extractor 에 상태를 넣고 싶어지면 설계 경고 신호다.
 - 재시도·내구성·상태 전이는 전부 호출자(PIKI-Server 의 item_snapshots outbox)의 책임이다. Extractor 는 "단건 시도 1회"에만 답한다.
-- 에스컬레이션(plain fetch → headless 브라우저)은 Extractor 내부 관심사다. 계약에 드러나지 않는다 — 호출자는 어떤 fetch 전략이 쓰였는지 모른다.
+- 에스컬레이션(plain fetch → headless 브라우저)은 Extractor 내부 관심사다. 응답 계약에 드러나지 않는다 — 호출자는 어떤 fetch 전략이 쓰였는지 모른다. 단 "어느 플랫폼을 처음부터 헤드리스로 보낼지"의 **정책**은 호출자(DB·백오피스)가 주인이라, 요청 필드 `headlessFirst` 로 힌트만 받는다(§2) — 무상태 불변식을 지키는 선에서의 유일한 정책 수용 지점이다.
 
 ## 1. 응답 3갈래 (전이 규약)
 
@@ -28,10 +28,11 @@
 요청:
 
 ```json
-{ "url": "https://www.musinsa.com/products/12345" }
+{ "url": "https://www.musinsa.com/products/12345", "headlessFirst": false }
 ```
 
 - `url` (필수): https 스킴의 상품 페이지 URL. 형식·스킴·미지원 플랫폼의 동기 검증은 호출자(PIKI-Server 등록 경계)가 이미 끝냈다는 전제이나, Extractor 도 자기 경계에서 방어 검증한다(다층 방어).
+- `headlessFirst` (선택, 기본 false — additive, 이관 7단계): 호출자의 플랫폼 라우팅 정책(`HEADLESS_FIRST`, DB·백오피스 동적 설정) 힌트. true 면 plain(정적 fetch)을 건너뛰고 처음부터 헤드리스 브라우저로 추출한다. 정책의 단일 진실은 호출자 DB 에 있고 무상태인 Extractor 는 요청 단위로만 받는다. Extractor 의 `product.extract.headless.enabled` 가 꺼져 있으면 무시된다(스위치가 힌트보다 우선).
 - 헤더 `X-Correlation-Id` (선택): 호출자의 item_snapshot id. 로그·trace 상관용이며 동작에 영향 없다.
 
 성공 200:
@@ -64,6 +65,8 @@
 
 - 대상 몰 502/503/504·연결 실패·빈 body (`UPSTREAM_ERROR`)
 - Gemini 5xx/429/408/transport 오류 (`LLM_UPSTREAM`)
+- 헤드리스 렌더 차단 (`HEADLESS_BLOCKED`, 이관 7단계 추가) — 렌더 서비스의 BLOCK 판정(HTTP 401/403/405/429/490 + 챌린지 title)은 429·일시 챌린지가 섞여 영구/일시를 못 가르므로 fail-safe 로 일시. 결정론적 차단의 재시도 낭비는 attempt 상한이 바운드
+- 헤드리스 렌더 서비스 연결 실패·타임아웃·빈 렌더·브라우저 오류 (`HEADLESS_UPSTREAM`, 이관 7단계 추가). 렌더는 됐는데 렌더 서비스 자체 파서가 title·price 를 못 찾은 경우(verdict=EMPTY/PARTIAL)는 실패가 아니다 — HTML 이 있으면 Extractor 파이프라인(구조화·LLM)이 이어서 추출한다
 - body 에 code 를 실을 수 있으나 호출자는 읽지 않는다(관측용).
 
 ### POST `/internal/extractions/image` — S3 이미지 OCR 추출 + 크롭 (이관 6단계, 계약만 선확정)
@@ -97,10 +100,13 @@
 | PIKI-Server → Extractor HTTP read | 55s (connect 2s) | stale 미만 — recover 의 유령 중복 발주 방지. link·image 공용 |
 | Extractor 내부 합계 (link) | 약 50s | 아래 합 + 여유 |
 | 대상 몰 fetch (link) | connect 5s / read 15s | 현행 유지 |
+| 헤드리스 render (link, 7단계) | connect 2s / read 20s | 실측 전형 1.6~5.5s(kream 프록시 포함) 대비 약 4배 여유. headless-first 최악(connect 2 + render 20 + LLM 30 = 약 52s)이 호출자 read 55s 안에 들도록 상한 |
 | Gemini | read 30s | 현행 유지 (link LLM fallback·image OCR 동일) |
 | Extractor 내부 합계 (image) | 약 40s | S3 download + Gemini OCR 30s + crop + 결과 upload. S3 는 동일 리전이라 수 초 |
 
 **안쪽 예산은 항상 바깥보다 작아야 한다.** link 와 image 가 호출자 read 55s 를 공유하므로, 어느 경로든 Extractor 내부 값을 늘릴 땐 이 표를 갱신하고 PIKI-Server 쪽 read 타임아웃과 함께 재검증한다.
+
+예외적으로 **에스컬레이션 경로(plain 실패 → headless)의 최악 스택**은 호출자 read 55s 를 넘을 수 있다. plain fetch 는 수동 redirect 추적(hop 상한 3 = 요청 최대 4회)마다 connect/read 타임아웃이 **새로 적용**되므로 fetch 단독의 이론 최악이 이미 약 88s 다(이 특성은 headless 이전부터 존재). 여기에 render 22s + LLM 30s 가 얹히면 이론 최악 약 140s — 단, 각 단이 전부 타임아웃까지 끄는 경우는 실측상 없다시피 하고(차단은 대개 즉시 4xx/5xx 로 떨어져 fetch 가 빨리 실패한다), 넘치면 호출자는 read 타임아웃 → 일시 실패로 처리해 recover 가 재시도한다. 그 사이 Extractor 가 계속 돌아 중복 발주가 겹쳐도 Extractor 는 무상태라 안전하고(§0 — 중복의 대가는 LLM 비용 한 번), attempt 상한 2 가 총비용을 바운드한다. 이 스택을 55s 안에 구겨 넣으려면 render 예산이 실측 대비 무의미하게 얇아져(5s 이하) recall 을 잃는다 — 의도된 트레이드오프다.
 
 ## 4. 진화 규칙
 

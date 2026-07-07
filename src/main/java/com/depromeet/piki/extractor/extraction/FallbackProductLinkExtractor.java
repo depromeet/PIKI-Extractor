@@ -23,6 +23,9 @@ import org.springframework.stereotype.Component;
 public class FallbackProductLinkExtractor implements ProductLinkExtractor {
 
     private static final String ESCALATION_METRIC = "product.extract.escalation";
+    // 직행(headless_first) 경로의 추세 축. 라벨 키는 {outcome} 뿐 — plain 실패가 없어 category 축이 존재하지 않는다
+    // (별도 메트릭 이름이라 escalation 의 {outcome, category} 키 집합과 충돌하지 않는다).
+    private static final String HEADLESS_FIRST_METRIC = "product.extract.headless_first";
     private static final String TAG_OUTCOME = "outcome";
     private static final String TAG_CATEGORY = "category";
     private static final String OUTCOME_SUCCESS = "success";
@@ -49,14 +52,20 @@ public class FallbackProductLinkExtractor implements ProductLinkExtractor {
     }
 
     @Override
-    public ProductSnapshot extract(ProductLink link) {
-        // 헤드리스가 꺼져 있으면(기본값) plain 에 그대로 위임한다 — 결과도 예외도 그대로 전파된다.
+    public ProductSnapshot extract(ProductLink link, boolean headlessFirst) {
+        // 헤드리스가 꺼져 있으면(기본값) plain 에 그대로 위임한다 — headlessFirst 힌트도 무시되어(호출자 정책이
+        // 이 서비스 스위치보다 앞설 수 없다) 결과도 예외도 그대로 전파된다.
         if (!headlessProperties.enabled()) {
             return plain.extract(link);
         }
 
-        // (확장 지점) 호출량 x 느린-실패 낭비가 큰 host 는 여기서 plain 을 건너뛰고 headless 로 직행하되, 소량(canary)만
-        // plain 으로 흘려 차단 해제를 감시한다. host 별 정책·canary 비율은 헤드리스 구현·운영 메트릭이 확정할 때 붙인다.
+        // 호출자(PIKI-Server)의 브라우저 직행 정책(DB, 백오피스에서 배포 없이 변경) — plain 이 항상 차단되는 host 의
+        // 느린-실패(fetch 타임아웃 후 에스컬레이트) 낭비를 없앤다. 직행 실패는 plain 으로 되돌리지 않고 그대로 전파한다
+        // (재시도는 호출자 outbox recover 축이, 정책 오지정은 백오피스 롤백이 진다). 차단 해제 감시용 canary(소량 plain)는
+        // 헤드리스 운영 메트릭이 쌓인 뒤 붙인다.
+        if (headlessFirst) {
+            return extractHeadlessFirst(link);
+        }
 
         try {
             return plain.extract(link);
@@ -66,6 +75,31 @@ public class FallbackProductLinkExtractor implements ProductLinkExtractor {
             }
             return escalateToHeadless(link, e);
         }
+    }
+
+    // 브라우저 직행(정책 힌트). outcome 을 별도 카운터로 집계한다 — escalation 카운터는 에스컬레이션 축만 커버해,
+    // 직행 볼륨·성공률이 시계열에 없으면 백오피스의 HEADLESS_FIRST 오지정(실제론 plain 이 통하는 host)이
+    // 로그 grep 전까지 조용히 지속된다(메트릭=추세, 로그=원장). 실패는 기록만 하고 그대로 전파한다.
+    private ProductSnapshot extractHeadlessFirst(ProductLink link) {
+        log.info("extract route=headless_first url={}", link.safeLogString());
+        try {
+            ProductSnapshot snapshot = headless.extract(link);
+            headlessFirstCounter(OUTCOME_SUCCESS).increment();
+            return snapshot;
+        } catch (Throwable failure) {
+            // escalateToHeadless 와 같은 이유로 Throwable — Error 실패도 집계에서 빠지지 않게 하고 그대로 rethrow.
+            headlessFirstCounter(OUTCOME_FAILED).increment();
+            log.warn(
+                "extract route=headless_first outcome=failed cause={} url={}",
+                failure.getClass().getSimpleName(),
+                link.safeLogString()
+            );
+            throw failure;
+        }
+    }
+
+    private Counter headlessFirstCounter(String outcome) {
+        return meterRegistry.counter(HEADLESS_FIRST_METRIC, TAG_OUTCOME, outcome);
     }
 
     // plain 이 막혀 headless 로 넘긴다. 결과를 outcome 으로 집계하되 "어떤 실패가 escalate 됐나"를 category 로 쪼갠다 —

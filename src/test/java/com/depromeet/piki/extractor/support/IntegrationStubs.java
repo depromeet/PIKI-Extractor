@@ -9,8 +9,9 @@ import org.springframework.context.annotation.Primary;
 //
 // 각 stub 은 운영 @Component 빈(HttpPageFetcher·GeminiHttpClient)과 타입이 같아 주입 후보가 2개가 된다.
 // @Primary 로 stub 우선을 명시한다 — 빈 이름·파라미터명 우연 일치에 기대지 않는다.
-// 이 서비스의 외부 경계는 셋이다: 대상 몰 HTTP(PageFetcher), LLM(GeminiClient), S3(ImageStorage). 통합 테스트는
-// 이 셋만 격리하고 오케스트레이션(Fallback→plain→구조화→LLM fallback, 이미지 download→OCR→crop→upload)은 실제 빈으로 탄다.
+// 이 서비스의 외부 경계는 넷이다: 대상 몰 HTTP(PageFetcher), LLM(GeminiClient), S3(ImageStorage),
+// 헤드리스 렌더(HeadlessRenderer). 통합 테스트는 이 넷만 격리하고 오케스트레이션(Fallback→plain→구조화→LLM
+// fallback, 이미지 download→OCR→crop→upload)은 실제 빈으로 탄다.
 @TestConfiguration(proxyBeanMethods = false)
 public class IntegrationStubs {
 
@@ -30,5 +31,11 @@ public class IntegrationStubs {
     @Primary
     StubImageStorage imageStorage() {
         return new StubImageStorage();
+    }
+
+    @Bean
+    @Primary
+    StubHeadlessRenderer headlessRenderer() {
+        return new StubHeadlessRenderer();
     }
 }

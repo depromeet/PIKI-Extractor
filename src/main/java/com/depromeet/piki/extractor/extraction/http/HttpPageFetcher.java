@@ -4,11 +4,7 @@ import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.domain.ProductLinkException;
 import com.depromeet.piki.extractor.extraction.PageContent;
 import com.depromeet.piki.extractor.extraction.PageFetcher;
-import java.net.Inet4Address;
-import java.net.Inet6Address;
-import java.net.InetAddress;
 import java.net.URI;
-import java.net.UnknownHostException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Set;
@@ -16,6 +12,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
@@ -48,13 +45,22 @@ public class HttpPageFetcher implements PageFetcher {
 
     private final RestClient restClient;
     private final RequestScopedDnsResolver dnsResolver;
+    private final InternalHostGuard internalHostGuard;
     // 원본 companion const 였던 hop 상한·fetch cap 을 FetchProperties 로 외부화(기본값 동일).
     private final int maxRedirects;
     private final int maxFetchChars;
 
-    public HttpPageFetcher(RestClient restClient, RequestScopedDnsResolver dnsResolver, FetchProperties properties) {
+    // RestClient 빈이 둘(pageFetch·headlessRender)이라 @Qualifier 로 어느 쪽인지 명시한다 — 없으면 부팅에서
+    // NoUniqueBeanDefinition 으로 죽고, 파라미터명 우연 일치에 기대면 rename 에 조용히 깨진다.
+    public HttpPageFetcher(
+        @Qualifier(PageFetchHttpClientConfig.PAGE_FETCH_REST_CLIENT) RestClient restClient,
+        RequestScopedDnsResolver dnsResolver,
+        FetchProperties properties
+    ) {
         this.restClient = restClient;
         this.dnsResolver = dnsResolver;
+        // 가드와 연결이 같은 resolver 를 봐야 IP pin 이 성립한다 — 같은 인스턴스로 직접 조립해 그 계약을 코드로 박는다.
+        this.internalHostGuard = new InternalHostGuard(dnsResolver);
         this.maxRedirects = properties.maxRedirects();
         this.maxFetchChars = properties.maxFetchChars();
     }
@@ -72,7 +78,8 @@ public class HttpPageFetcher implements PageFetcher {
     private PageContent fetchFollowingRedirects(ProductLink link) {
         ProductLink current = link;
         for (int hop = 0; hop <= maxRedirects; hop++) {
-            guardAgainstInternalHost(current);
+            // redirect 를 따라갈 때도 매 hop 의 새 host 에 대해 다시 검증해 점프 후 SSRF 를 막는다.
+            internalHostGuard.verify(current);
             ResponseEntity<byte[]> response = request(current);
             // Location 을 가진 진짜 redirect 코드(301/302/303/307/308)만 따라간다.
             // 304 Not Modified·300 Multiple Choices·305 Use Proxy 같은 비-redirect 3xx 는 일반 응답처럼 body 로 처리한다.
@@ -128,7 +135,7 @@ public class HttpPageFetcher implements PageFetcher {
 
     // 3xx 응답의 Location 을 절대 URI 로 만들고, https 면 다음 hop 으로 따라간다.
     // cross-domain redirect 도 따라간다(무신사 OneLink·bit.ly 등 단축·딥링크가 다른 도메인의 최종 상품 페이지로 보낸다).
-    // 사설망 SSRF 는 매 hop 의 guardAgainstInternalHost(IP 검증)가 막으므로, 도메인 단위 차단 없이도 내부망 접근은 닫혀 있다.
+    // 사설망 SSRF 는 매 hop 의 InternalHostGuard.verify(IP 검증)가 막으므로, 도메인 단위 차단 없이도 내부망 접근은 닫혀 있다.
     private ProductLink nextRedirect(ProductLink current, ResponseEntity<byte[]> response) {
         URI location = redirectLocation(current, response);
         // 상대 Location(/path)도 원본 URI 에 resolve 해 절대 URI 로 만든다.
@@ -159,67 +166,6 @@ public class HttpPageFetcher implements PageFetcher {
             throw PageFetchException.malformedRedirect(null);
         }
         return location;
-    }
-
-    // host 가 외부 라우팅 불가 주소(loopback/사설/링크로컬/메타데이터/IPv6 ULA)로 resolve 되면 SSRF 위험으로 차단.
-    // 외부 쇼핑몰만 fetch 하는 것이 본 컴포넌트의 책임이라 외부 라우팅 가능 IP 만 허용한다.
-    // redirect 를 따라갈 때도 매 hop 의 새 host 에 대해 다시 호출해 점프 후 SSRF 를 막는다.
-    private void guardAgainstInternalHost(ProductLink link) {
-        String host = link.value().getHost();
-        if (host == null) {
-            log.warn("[SSRF] blocked: missing host url={}", link.safeLogString());
-            throw PageFetchException.blockedHost();
-        }
-        InetAddress[] addresses;
-        try {
-            addresses = dnsResolver.resolve(host);
-        } catch (UnknownHostException e) {
-            log.info("link fetch unknown host url={}", link.safeLogString());
-            throw PageFetchException.upstreamError(e);
-        }
-        for (InetAddress addr : addresses) {
-            if (isInternalAddress(addr)) {
-                log.error("[SSRF] blocked: internal address resolved url={}", link.safeLogString());
-                throw PageFetchException.blockedHost();
-            }
-        }
-    }
-
-    // 외부 라우팅 불가 주소면 SSRF 위험으로 본다. Java 의 isSiteLocalAddress 는 IPv4 사설만 잡고 IPv6 ULA(fc00::/7)는
-    // 못 잡으므로(GCP·Alibaba 등의 IPv6 메타데이터·내부망), 이를 별도로 차단한다.
-    // (원본 Kotlin 의 internal 가시성 → 같은 패키지 테스트가 직접 호출하도록 package-private.)
-    boolean isInternalAddress(InetAddress addr) {
-        return addr.isLoopbackAddress()
-            || addr.isAnyLocalAddress()
-            || addr.isSiteLocalAddress()
-            || addr.isLinkLocalAddress()
-            || addr.isMulticastAddress()
-            || isUniqueLocalIpv6(addr)
-            || isCarrierGradeNatIpv4(addr)
-            // AWS / GCP IPv4 메타데이터(169.254.169.254 는 link-local 이라 위에서 잡히지만 방어적으로 명시).
-            || "169.254.169.254".equals(addr.getHostAddress());
-    }
-
-    // IPv6 Unique Local Address(fc00::/7). 첫 바이트의 상위 7비트가 1111110 (0xfc 또는 0xfd)이면 ULA 다.
-    private boolean isUniqueLocalIpv6(InetAddress addr) {
-        if (!(addr instanceof Inet6Address)) {
-            return false;
-        }
-        byte[] bytes = addr.getAddress();
-        int first = bytes.length == 0 ? 0 : bytes[0];
-        return (first & 0xfe) == 0xfc;
-    }
-
-    // IPv4 Carrier-Grade NAT(100.64.0.0/10). 외부 라우팅이 안 되는 캐리어 NAT 대역으로, 일부 클라우드
-    // 메타데이터 엔드포인트(예: 100.100.100.200)가 여기 속해 SSRF 차단 대상이다.
-    private boolean isCarrierGradeNatIpv4(InetAddress addr) {
-        if (!(addr instanceof Inet4Address)) {
-            return false;
-        }
-        byte[] bytes = addr.getAddress();
-        int first = bytes[0] & 0xFF;
-        int second = bytes[1] & 0xFF;
-        return first == 100 && second >= 64 && second <= 127;
     }
 
     // 응답 Content-Type 의 charset(있으면). RestClient 의 헤더에서 직접 읽어 디코딩 우선순위 1순위로 쓴다.

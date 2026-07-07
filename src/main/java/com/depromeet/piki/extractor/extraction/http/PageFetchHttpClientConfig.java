@@ -29,7 +29,11 @@ import org.springframework.web.client.RestClient;
 @Configuration
 public class PageFetchHttpClientConfig {
 
-    @Bean
+    // RestClient 빈이 둘(pageFetch·headlessRender)이라 주입 지점이 @Qualifier 로 이 이름을 참조한다 — 상수로
+    // 못박아 rename-safe + single-source (LinkExtractionStrategy 의 빈 이름 상수와 같은 이유).
+    public static final String PAGE_FETCH_REST_CLIENT = "pageFetchRestClient";
+
+    @Bean(PAGE_FETCH_REST_CLIENT)
     public RestClient pageFetchRestClient(
         ObservationRegistry observationRegistry,
         RequestScopedDnsResolver dnsResolver,

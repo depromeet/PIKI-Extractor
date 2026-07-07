@@ -40,8 +40,13 @@ public class ExtractionController {
         // 형식·스킴 위반은 ProductLink.parse 가 INVALID_URL(422) 로 떨어뜨린다 — 정상 흐름에선 호출자가
         // 등록 경계에서 이미 걸렀으므로 방어 검증이다(다층 방어).
         ProductLink link = ProductLink.parse(request.url());
-        log.info("extract request correlationId={} url={}", correlationId, link.safeLogString());
-        ProductSnapshot snapshot = productLinkExtractor.extract(link);
+        log.info(
+            "extract request correlationId={} headlessFirst={} url={}",
+            correlationId,
+            request.headlessFirst(),
+            link.safeLogString()
+        );
+        ProductSnapshot snapshot = productLinkExtractor.extract(link, request.headlessFirst());
         return ExtractionResponse.from(snapshot);
     }
 

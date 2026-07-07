@@ -3,24 +3,19 @@ package com.depromeet.piki.extractor.extraction.http;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import io.micrometer.observation.ObservationRegistry;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
-// PIKI-Server: product/service/http/HttpPageFetcherSsrfGuardTest.kt 포팅.
-// SSRF 가드의 internal-address 판정을 검증한다. redirect 가 매 hop 새 host 를 허용하므로 이 판정이 보안의 최종 방어선이다.
+// (구 HttpPageFetcherSsrfGuardTest — 가드가 fetch·헤드리스 두 경로 공용 InternalHostGuard 로 추출되며 따라왔다.)
+// SSRF 가드의 internal-address 판정을 검증한다. redirect 가 매 hop 새 host 를 허용하고 브라우저 직행 경로도
+// 이 판정을 거치므로, 이 판정이 보안의 최종 방어선이다.
 // 특히 IPv6 ULA(fc00::/7)는 Java 의 isSiteLocalAddress 가 못 잡아 별도로 막는다.
-class HttpPageFetcherSsrfGuardTest {
+class InternalHostGuardTest {
 
-    private final HttpPageFetcher fetcher =
-        new HttpPageFetcher(
-            new PageFetchHttpClientConfig()
-                .pageFetchRestClient(ObservationRegistry.NOOP, new RequestScopedDnsResolver(), FetchProperties.defaults()),
-            new RequestScopedDnsResolver(),
-            FetchProperties.defaults());
+    private final InternalHostGuard guard = new InternalHostGuard(new RequestScopedDnsResolver());
 
     @ParameterizedTest
     @ValueSource(strings = {
@@ -39,7 +34,7 @@ class HttpPageFetcherSsrfGuardTest {
     })
     @DisplayName("내부·메타데이터 주소는 차단된다")
     void internalAndMetadataAddressesAreBlocked(String ip) throws UnknownHostException {
-        assertTrue(fetcher.isInternalAddress(InetAddress.getByName(ip)), ip + " 는 차단되어야 함");
+        assertTrue(guard.isInternalAddress(InetAddress.getByName(ip)), ip + " 는 차단되어야 함");
     }
 
     @ParameterizedTest
@@ -51,6 +46,6 @@ class HttpPageFetcherSsrfGuardTest {
     })
     @DisplayName("공인 라우팅 가능 주소는 허용된다")
     void publicRoutableAddressesAreAllowed(String ip) throws UnknownHostException {
-        assertFalse(fetcher.isInternalAddress(InetAddress.getByName(ip)), ip + " 는 허용되어야 함");
+        assertFalse(guard.isInternalAddress(InetAddress.getByName(ip)), ip + " 는 허용되어야 함");
     }
 }

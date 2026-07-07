@@ -57,9 +57,11 @@ class ProductLinkExtractE2ETest {
     // fetch → 구조화 우선 → Gemini fallback 전체 경로를 측정한다 (오케스트레이터 그대로).
     private final DefaultProductLinkExtractor extractor = new DefaultProductLinkExtractor(
         pageFetcher,
-        new StructuredDataExtractor(objectMapper),
-        new GeminiHtmlExtractor(httpClient),
-        new SimpleMeterRegistry()
+        new HtmlSnapshotPipeline(
+            new StructuredDataExtractor(objectMapper),
+            new GeminiHtmlExtractor(httpClient),
+            new SimpleMeterRegistry()
+        )
     );
 
     @Test
