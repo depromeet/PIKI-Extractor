@@ -12,3 +12,11 @@ PIKI 의 상품 추출 서비스. 상품 URL(또는 S3 이미지)을 받아 fetc
 ./gradlew test      # Docker 불필요 (DB 없음)
 ./gradlew bootRun   # 기본 포트 8090
 ```
+
+## 운영 (prod 박스)
+
+- 박스 자체: `infra/extractor/` (terraform, EC2·SG·IAM).
+- 앱 컨테이너 기동: `infra/scripts/run-extractor.sh` — 컨테이너 (재)기동의 SSOT.
+- 관측(Alloy) 배선: `infra/scripts/provision-observability.sh` — 공통 Alloy 블록을 이 박스 값으로 호출.
+- 둘 다 박스 안에서 SSM(run-command 또는 세션)으로 실행하며, 시크릿은 SSM Parameter Store(`/piki-extractor/*`)에서 읽는다.
+- 관측 계약(라벨 opt-in 등)은 TeamPiKi/infra 의 `contracts/observability.md` 가 SSOT.
