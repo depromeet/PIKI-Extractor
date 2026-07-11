@@ -61,7 +61,7 @@ public record GeminiProperties(
      */
     public record Retry(
         // max-attempts 는 총 시도 횟수(초기 호출 + 재시도). 기본 1 = 재시도 없음.
-        // URL 파싱 재시도를 호출자(PIKI-Server) outbox recover 로 일원화해 Gemini 내부 재시도를 끈 것이 기본값이다.
+        // URL 파싱 재시도를 호출자(core) outbox recover 로 일원화해 Gemini 내부 재시도를 끈 것이 기본값이다.
         @DefaultValue("1") int maxAttempts,
         @DefaultValue("1000") long initialDelayMs
     ) {

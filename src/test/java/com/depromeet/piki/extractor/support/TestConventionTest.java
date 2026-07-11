@@ -18,7 +18,7 @@ import org.junit.jupiter.api.Test;
 /**
  * 테스트 컨벤션을 기계로 강제하는 메타 테스트.
  *
- * <p>PIKI-Extractor CLAUDE.md `## 테스트` 의 불변식 중 **오탐 없이 기계로 PASS/FAIL 을 가를 수 있는 것만**
+ * <p>extractor CLAUDE.md `## 테스트` 의 불변식 중 **오탐 없이 기계로 PASS/FAIL 을 가를 수 있는 것만**
  * 여기서 강제한다. 서비스 단독 테스트 여부·한국어 네이밍 적정성처럼 사람·모델 판단이 끼는 규칙은 산문(CLAUDE.md)에 둔다.
  *
  * <p>src/test/java 의 Java 소스를 **import 라인 기준**으로 스캔한다. import 기준이라

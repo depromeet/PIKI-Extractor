@@ -58,7 +58,7 @@ public class FallbackProductLinkExtractor implements ProductLinkExtractor {
             return plain.extract(link);
         }
 
-        // 호출자(PIKI-Server)의 브라우저 직행 정책(DB, 백오피스에서 배포 없이 변경) — plain 이 항상 차단되는 host 의
+        // 호출자(core)의 브라우저 직행 정책(DB, 백오피스에서 배포 없이 변경) — plain 이 항상 차단되는 host 의
         // 느린-실패(fetch 타임아웃 후 에스컬레이트) 낭비를 없앤다. 직행 실패는 plain 으로 되돌리지 않고 그대로 전파한다
         // (재시도는 호출자 outbox recover 축이, 정책 오지정은 백오피스 롤백이 진다). 차단 해제 감시용 canary(소량 plain)는
         // 헤드리스 운영 메트릭이 쌓인 뒤 붙인다.

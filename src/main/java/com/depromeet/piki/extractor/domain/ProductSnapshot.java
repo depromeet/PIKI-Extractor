@@ -10,7 +10,7 @@ public record ProductSnapshot(
     String currency
 ) {
 
-    // 컬럼 길이 제약은 호출자(PIKI-Server items 테이블)의 계약이다. 값이 바뀌면 양쪽을 함께 갱신한다.
+    // 컬럼 길이 제약은 호출자(core items 테이블)의 계약이다. 값이 바뀌면 양쪽을 함께 갱신한다.
     private static final int NAME_MAX_LENGTH = 512;
     private static final int IMAGE_URL_MAX_LENGTH = 2048;
 

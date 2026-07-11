@@ -71,7 +71,7 @@ class ExtractionImageIntegrationTest extends IntegrationTestSupport {
     void nullContentTypeRecoversFromKeyExtension() throws Exception {
         // S3 GetObject 가 content-type 메타를 안 싣는 상황 — 등록 때 호출자가 key 에 박은 확장자(.png)로 복원해야
         // 메타 결함이 IMAGE_UNSUPPORTED(비복구 확정 실패)로 새지 않는다. (이 계약은 이 레포가 유일하게 보증한다 —
-        // 호출자(PIKI-Server)엔 download 경로가 없다.)
+        // 호출자(core)엔 download 경로가 없다.)
         stubGeminiClient.reset();
         stubImageStorage.onDownload = (bucket, key) -> new StoredImage(new byte[] {1, 2, 3}, null);
         stubGeminiClient.build = request -> new GeminiImageResult("복원 상품", 12000, null, "KRW", null);
