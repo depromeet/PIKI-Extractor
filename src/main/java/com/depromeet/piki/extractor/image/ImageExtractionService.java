@@ -10,7 +10,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 // 이미지 OCR 추출의 오케스트레이터 — S3 raw 원본을 읽고(download) OCR 추출·크롭 후 결과 이미지를 S3 에 올려(upload)
-// 그 public URL 을 담은 ProductSnapshot 을 돌려준다. 상태 전이(markReady·raw 회수)는 호출자(PIKI-Server) 소관이고,
+// 그 public URL 을 담은 ProductSnapshot 을 돌려준다. 상태 전이(markReady·raw 회수)는 호출자(core) 소관이고,
 // 이 서비스는 download→extract→crop→upload 만 책임진다. bucket 은 요청이 주므로 세 환경 버킷 모두 다룬다.
 @Component
 public class ImageExtractionService {

@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-// 내부 추출 API (docs/api-contract.md). 소비자는 PIKI-Server outbox 워커 하나뿐이고 보안그룹으로 격리되므로
+// 내부 추출 API (docs/api-contract.md). 소비자는 core outbox 워커 하나뿐이고 보안그룹으로 격리되므로
 // 인증·응답 래퍼 없이 계약 그대로 노출한다. 두 경로(link·image)가 같은 응답 모양(ExtractionResponse)을 공유한다.
 @RestController
 @RequestMapping("/internal/extractions")

@@ -3,7 +3,7 @@ package com.depromeet.piki.extractor.common.storage;
 // 이미지(OCR) 경로가 쓰는 두 연산:
 //   upload   — 크롭 결과를 저장하고 공개 URL 을 돌려준다.
 //   download — outbox 재실행 시점에 등록 워커가 적재한 raw 원본을 다시 읽는다.
-// presign·exists·delete·deleteByPrefix 는 등록 수명주기(발급·확인·회수·탈퇴 파기)라 PIKI-Server 소관이다.
+// presign·exists·delete·deleteByPrefix 는 등록 수명주기(발급·확인·회수·탈퇴 파기)라 core 소관이다.
 public interface ImageStorage {
 
     // 이미지 바이트를 저장소(S3)에 올리고 공개 접근 URL 을 돌려준다.

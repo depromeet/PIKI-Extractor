@@ -13,7 +13,7 @@ import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 // AWS SDK 예외(네트워크·권한·객체 없음·timeout)를 계약 예외 ImageStorageException(일시 502)으로 변환한다.
-// presign·exists·delete·deleteByPrefix 는 등록 수명주기라 PIKI-Server 소관이다.
+// presign·exists·delete·deleteByPrefix 는 등록 수명주기라 core 소관이다.
 @Component
 public class S3ImageStorage implements ImageStorage {
 

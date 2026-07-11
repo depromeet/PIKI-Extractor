@@ -20,7 +20,7 @@ import org.springframework.web.context.WebApplicationContext;
 
 // POST /internal/extractions/link 의 HTTP 계약(docs/api-contract.md 응답 3갈래)을 실제 파이프라인
 // (Fallback→plain→구조화→LLM fallback, 외부 경계 PageFetcher·GeminiClient 만 stub)으로 검증한다.
-// 호출자(PIKI-Server)의 전이 판정이 status 만 보므로, status 와 body 모양(code·필드)이 이 테스트의 계약이다.
+// 호출자(core)의 전이 판정이 status 만 보므로, status 와 body 모양(code·필드)이 이 테스트의 계약이다.
 class ExtractionLinkIntegrationTest extends IntegrationTestSupport {
 
     private static final String STRUCTURED_HTML = """

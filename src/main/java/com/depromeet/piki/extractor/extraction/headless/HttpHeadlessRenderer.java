@@ -15,7 +15,7 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
-// PIKI-HeadlessBrowser 의 POST /render 호출 + verdict 를 계약으로 번역하는 wire 구현.
+// renderer 의 POST /render 호출 + verdict 를 계약으로 번역하는 wire 구현.
 // 렌더 서비스는 실제 브라우저(patchright)로 페이지를 열어 최선의 HTML 을 돌려준다 — 파싱은 여기서 하지 않고
 // 렌더된 HTML 을 PageContent 로 되돌려 기존 파이프라인(구조화 → LLM)에 흘려넣는다.
 //

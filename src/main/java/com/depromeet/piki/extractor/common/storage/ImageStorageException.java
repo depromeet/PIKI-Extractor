@@ -4,7 +4,7 @@ import com.depromeet.piki.extractor.common.exception.ExtractionErrorCode;
 import com.depromeet.piki.extractor.common.exception.ExtractionException;
 
 // 스토리지(S3) 실패의 계약 예외 — permanent=false(일시 실패, 502).
-// 호출자(PIKI-Server 워커)가 PROCESSING 유지 후 recover 재시도한다.
+// 호출자(core 워커)가 PROCESSING 유지 후 recover 재시도한다.
 // message 는 로그·디버깅용 고정 문구이고 응답 body 에는 code 만 나간다(내부 정보 비노출).
 // code 는 스토리지 실패 전용 STORAGE_ERROR (docs/api-contract.md 의 code 표에 함께 있다).
 public final class ImageStorageException extends ExtractionException {

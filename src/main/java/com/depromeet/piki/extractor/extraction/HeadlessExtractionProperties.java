@@ -6,11 +6,11 @@ import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
-// 헤드리스(차단 우회) 추출 설정 — PIKI-HeadlessBrowser 의 POST /render 호출 파라미터.
+// 헤드리스(차단 우회) 추출 설정 — renderer 의 POST /render 호출 파라미터.
 // 운영 주입은 relaxed binding 환경변수: PRODUCT_EXTRACT_HEADLESS_ENABLED · PRODUCT_EXTRACT_HEADLESS_BASE_URL.
 //
 //   readTimeout — 실측(kream 프록시 5.5s·oliveyoung 1.6s·ably 1.9s) 대비 약 4배 여유. 렌더 서비스 내부
-//                 최악(goto 40s + 가격 대기 8s)을 다 기다리지 않는 이유: 호출자(PIKI-Server) read 55s 예산 안에서
+//                 최악(goto 40s + 가격 대기 8s)을 다 기다리지 않는 이유: 호출자(core) read 55s 예산 안에서
 //                 LLM fallback(30s) 몫을 남겨야 한다(docs/api-contract.md §3). 상한 초과 렌더는 일시 실패로
 //                 떨어져 outbox recover 가 재시도한다.
 //   maxHtmlChars — 렌더된 DOM 보관·파싱 비용의 안전 상한 (정적 fetch 의 FetchProperties.maxFetchChars 와 같은 값).
