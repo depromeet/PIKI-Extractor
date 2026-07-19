@@ -62,14 +62,15 @@ jobs:
           docker push "$IMAGE_LATEST"
           docker push "$IMAGE_SHA"
 
-      # 공용 블록 정본을 받아 박스로 올린다. strip_components: 2 로 piki-infra/blocks/ 를 떼어
+      # 공용 블록 정본을 받아 박스로 올린다. strip_components: 2 로 shared-infra/blocks/ 를 떼어
       # /tmp/piki-blocks/*.sh 로 안착 (core deploy 와 동일 패턴).
       - name: Checkout infra blocks
         uses: actions/checkout@v4
         with:
           repository: TeamPiKi/infra
           ref: main
-          path: piki-infra
+          # 경로 별칭은 shared-infra - 서비스 자신의 파일과 "공용 정본" 이 이름으로 구분되게 한다 (core 와 동일).
+          path: shared-infra
           sparse-checkout: blocks
           persist-credentials: false
 
@@ -79,7 +80,7 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: "piki-infra/blocks/run_container.sh,piki-infra/blocks/healthcheck.sh"
+          source: "shared-infra/blocks/run_container.sh,shared-infra/blocks/healthcheck.sh"
           target: "/tmp/piki-blocks"
           strip_components: 2
 
@@ -95,13 +96,15 @@ jobs:
           script: |
             set -euo pipefail
 
-            # ── 앱 시크릿/설정을 SSM 에서 pull 해 env 파일로 만든다 (/piki-extractor/<kebab-key>, core 와 같은 패턴) ──
+            # ── 앱 시크릿/설정을 SSM 에서 pull 해 env 파일로 만든다 (/piki-extractor/app/<kebab-key>) ──
+            # 경로를 app/ 하위로 좁혀 앱 소비분만 받는다 - 같은 prefix 의 관측 자격(grafana-*, 박스 Alloy 용)이
+            # 경로 전량 pull 로 앱 컨테이너 env 에 섞이던 것을 이름 필터 대신 경로로 구조적으로 분리한다.
             # 값은 로그에 절대 남기지 않는다(set -x·echo 금지). aws-cli 는 공용 ECR 이미지(패치 태그 고정),
             # --network host 로 박스 instance role(IMDS) 자격증명에 닿는다 (읽기 권한 = extractor terraform 의 ssm-params).
             AWSCLI_IMAGE="public.ecr.aws/aws-cli/aws-cli:2.35.21"
             if ! PARAMS_JSON="$(docker run --rm --network host "$AWSCLI_IMAGE" \
               ssm get-parameters-by-path \
-              --path "/piki-extractor/" --recursive --with-decryption \
+              --path "/piki-extractor/app/" --recursive --with-decryption \
               --region ap-northeast-2 --output json)"; then
               echo "::error::SSM get-parameters-by-path 호출 실패 - IAM 권한(ssm-params)·네트워크 확인"
               exit 1
@@ -117,13 +120,9 @@ jobs:
             import sys, json
             params = json.load(sys.stdin).get("Parameters", [])
             if not params:
-                raise SystemExit("no parameters under /piki-extractor/")
+                raise SystemExit("no parameters under /piki-extractor/app/")
             for p in params:
                 key = p["Name"].rsplit("/", 1)[1].replace("-", "_").upper()
-                # /piki-extractor/grafana-* 는 박스 수집기(Alloy)용 자격이다 - 앱은 소비하지 않으므로
-                # 앱 컨테이너 env 에 싣지 않는다 (읽는 쪽은 provision-observability.sh).
-                if key.startswith("GRAFANA_"):
-                    continue
                 val = p["Value"]
                 if "\n" in val:
                     raise SystemExit(f"multi-line value not supported by --env-file: {key}")
@@ -139,7 +138,7 @@ jobs:
             echo "TRACING_OTLP_ENABLED=true" >> "$ENV_FILE"
             echo "OTLP_ENDPOINT=http://host.docker.internal:4318/v1/traces" >> "$ENV_FILE"
             echo "LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs" >> "$ENV_FILE"
-            echo "SSM env $(grep -c '' "$ENV_FILE") 라인 로드 (/piki-extractor/)"
+            echo "SSM env $(grep -c '' "$ENV_FILE") 라인 로드 (/piki-extractor/app/)"
 
             chmod +x /tmp/piki-blocks/run_container.sh /tmp/piki-blocks/healthcheck.sh
 
