@@ -120,6 +120,10 @@ jobs:
                 raise SystemExit("no parameters under /piki-extractor/")
             for p in params:
                 key = p["Name"].rsplit("/", 1)[1].replace("-", "_").upper()
+                # /piki-extractor/grafana-* 는 박스 수집기(Alloy)용 자격이다 - 앱은 소비하지 않으므로
+                # 앱 컨테이너 env 에 싣지 않는다 (읽는 쪽은 provision-observability.sh).
+                if key.startswith("GRAFANA_"):
+                    continue
                 val = p["Value"]
                 if "\n" in val:
                     raise SystemExit(f"multi-line value not supported by --env-file: {key}")
@@ -129,13 +133,22 @@ jobs:
             fi
             # 튜닝값(비시크릿)은 여기 고정 - 시크릿이 아니라 SSM 에 두지 않는다.
             echo "JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=70" >> "$ENV_FILE"
+            # 관측 배선(비시크릿): 트레이스는 박스 로컬 Alloy(4318, 아래 --add-host 의 host-gateway 경유)로
+            # push 하고, 로그는 공통 Loki 파이프라인이 전제하는 ECS JSON 으로 낸다. 아래 --label piki.* 와
+            # 함께 관측 계약(TeamPiKi/infra contracts/observability.md)을 이룬다.
+            echo "TRACING_OTLP_ENABLED=true" >> "$ENV_FILE"
+            echo "OTLP_ENDPOINT=http://host.docker.internal:4318/v1/traces" >> "$ENV_FILE"
+            echo "LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs" >> "$ENV_FILE"
             echo "SSM env $(grep -c '' "$ENV_FILE") 라인 로드 (/piki-extractor/)"
 
             chmod +x /tmp/piki-blocks/run_container.sh /tmp/piki-blocks/healthcheck.sh
 
             bash /tmp/piki-blocks/run_container.sh \
               --name piki-extractor --image "$IMAGE" --restart unless-stopped \
-              --publish 8090:8090 --env-file "$ENV_FILE" --pull --replace
+              --publish 8090:8090 --env-file "$ENV_FILE" --pull --replace \
+              --add-host host.docker.internal:host-gateway \
+              --label piki.observe=true --label piki.service=piki-extractor \
+              --label piki.metrics.port=8090 --label piki.metrics.path=/actuator/prometheus
 
             bash /tmp/piki-blocks/healthcheck.sh \
               --url http://localhost:8090/actuator/health --interval 5 --attempts 24 \
