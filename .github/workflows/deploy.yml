@@ -24,6 +24,8 @@ jobs:
     runs-on: ubuntu-24.04-arm # 박스(t4g/arm64)와 동일 arch 네이티브 빌드 - buildx 크로스빌드 불필요 (core deploy 와 같은 선택)
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-java@v4
         with:
