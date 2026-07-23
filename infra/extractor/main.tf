@@ -79,7 +79,11 @@ resource "aws_iam_role_policy" "extractor_params" {
     Statement = [{
       Effect   = "Allow"
       Action   = ["ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath"]
-      Resource = "arn:aws:ssm:ap-northeast-2:*:parameter/${var.name_prefix}/*"
+      # 관측 자격은 세 서비스가 공유 경로 하나를 읽는다(회전 1곳화, TeamPiKi/core#771).
+      Resource = [
+        "arn:aws:ssm:ap-northeast-2:*:parameter/${var.name_prefix}/*",
+        "arn:aws:ssm:ap-northeast-2:*:parameter/piki/observability/*",
+      ]
     }]
   })
 }
