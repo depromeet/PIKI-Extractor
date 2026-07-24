@@ -47,6 +47,8 @@ curl -fsSL "$INFRA_RAW_BASE/provision-alloy.sh" -o "$WORK_DIR/provision-alloy.sh
   || { echo "provision-alloy.sh fetch 실패 (ref=$REF)" >&2; exit 1; }
 
 # --- 2. Grafana Cloud 자격을 SSM Parameter Store 에서 조회 ---
+# 자격의 정본은 공유 경로 /piki/observability/grafana-* 하나다(세 서비스 박스가 같은 경로를 읽어
+# 토큰 회전이 1곳 put-parameter 로 끝난다 — TeamPiKi/core#771, 계약: TeamPiKi/infra contracts/observability.md).
 # 박스엔 aws cli 가 없어 dockerized aws cli 로 조회한다.
 get_ssm_param() {
   local param_name="$1"
@@ -60,21 +62,21 @@ get_ssm_param() {
 }
 
 # metrics/logs/token 5종은 필수 - 없으면 관측이 성립하지 않으므로 즉시 실패.
-GRAFANA_METRICS_URL=$(get_ssm_param /piki-extractor/grafana-metrics-url) \
-  || { echo "필수 SSM 파라미터 조회 실패: /piki-extractor/grafana-metrics-url" >&2; exit 1; }
-GRAFANA_METRICS_USER=$(get_ssm_param /piki-extractor/grafana-metrics-user) \
-  || { echo "필수 SSM 파라미터 조회 실패: /piki-extractor/grafana-metrics-user" >&2; exit 1; }
-GRAFANA_LOGS_URL=$(get_ssm_param /piki-extractor/grafana-logs-url) \
-  || { echo "필수 SSM 파라미터 조회 실패: /piki-extractor/grafana-logs-url" >&2; exit 1; }
-GRAFANA_LOGS_USER=$(get_ssm_param /piki-extractor/grafana-logs-user) \
-  || { echo "필수 SSM 파라미터 조회 실패: /piki-extractor/grafana-logs-user" >&2; exit 1; }
-GRAFANA_CLOUD_TOKEN=$(get_ssm_param /piki-extractor/grafana-cloud-token) \
-  || { echo "필수 SSM 파라미터 조회 실패: /piki-extractor/grafana-cloud-token" >&2; exit 1; }
+GRAFANA_METRICS_URL=$(get_ssm_param /piki/observability/grafana-metrics-url) \
+  || { echo "필수 SSM 파라미터 조회 실패: /piki/observability/grafana-metrics-url" >&2; exit 1; }
+GRAFANA_METRICS_USER=$(get_ssm_param /piki/observability/grafana-metrics-user) \
+  || { echo "필수 SSM 파라미터 조회 실패: /piki/observability/grafana-metrics-user" >&2; exit 1; }
+GRAFANA_LOGS_URL=$(get_ssm_param /piki/observability/grafana-logs-url) \
+  || { echo "필수 SSM 파라미터 조회 실패: /piki/observability/grafana-logs-url" >&2; exit 1; }
+GRAFANA_LOGS_USER=$(get_ssm_param /piki/observability/grafana-logs-user) \
+  || { echo "필수 SSM 파라미터 조회 실패: /piki/observability/grafana-logs-user" >&2; exit 1; }
+GRAFANA_CLOUD_TOKEN=$(get_ssm_param /piki/observability/grafana-cloud-token) \
+  || { echo "필수 SSM 파라미터 조회 실패: /piki/observability/grafana-cloud-token" >&2; exit 1; }
 
 # traces 2종은 선택 - 없으면 빈 값으로 둔다. 공통 config.alloy 가 더미 endpoint 로
 # fallback 해 trace export 만 비활성화되고(metrics/logs 는 정상 동작), 스크립트는 실패하지 않는다.
-GRAFANA_TRACES_URL=$(get_ssm_param /piki-extractor/grafana-traces-url) || GRAFANA_TRACES_URL=""
-GRAFANA_TRACES_USER=$(get_ssm_param /piki-extractor/grafana-traces-user) || GRAFANA_TRACES_USER=""
+GRAFANA_TRACES_URL=$(get_ssm_param /piki/observability/grafana-traces-url) || GRAFANA_TRACES_URL=""
+GRAFANA_TRACES_USER=$(get_ssm_param /piki/observability/grafana-traces-user) || GRAFANA_TRACES_USER=""
 
 export GRAFANA_METRICS_URL GRAFANA_METRICS_USER
 export GRAFANA_LOGS_URL GRAFANA_LOGS_USER
